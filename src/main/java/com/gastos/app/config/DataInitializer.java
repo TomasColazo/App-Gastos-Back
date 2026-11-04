@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -46,164 +47,222 @@ public class DataInitializer implements CommandLineRunner {
         Category serviciosCat = getOrCreateCategory("Servicios del Hogar (Luz, Agua, Gas, Internet)", "zap", "#F59E0B", ExpenseType.SERVICE);
         Category impuestosCat = getOrCreateCategory("Impuestos (Muni, Rentas, Expensas)", "landmark", "#3B82F6", ExpenseType.SERVICE);
         Category telefoniaCat = getOrCreateCategory("Telefonía y Comunicaciones", "phone", "#6366F1", ExpenseType.SERVICE);
-        Category superCat = getOrCreateCategory("Supermercado y Alimentos", "shopping-cart", "#10B981", ExpenseType.GROCERY);
-        Category suscripCat = getOrCreateCategory("Suscripciones Digitales", "tv", "#8B5CF6", ExpenseType.SUBSCRIPTION);
-        Category cuotasCat = getOrCreateCategory("Cuotas de Tarjeta y Préstamos", "credit-card", "#EF4444", ExpenseType.INSTALLMENT);
-        Category salidasCat = getOrCreateCategory("Salidas, Bares y Restaurantes", "utensils", "#EC4899", ExpenseType.LEISURE);
-        Category transCat = getOrCreateCategory("Transporte y Combustible", "car", "#0EA5E9", ExpenseType.TRANSPORT);
-        Category variosCat = getOrCreateCategory("Gastos Diarios / Varios", "coffee", "#64748B", ExpenseType.DAILY);
+        getOrCreateCategory("Supermercado y Alimentos", "shopping-cart", "#10B981", ExpenseType.GROCERY);
+        getOrCreateCategory("Suscripciones Digitales", "tv", "#8B5CF6", ExpenseType.SUBSCRIPTION);
+        getOrCreateCategory("Cuotas de Tarjeta y Préstamos", "credit-card", "#EF4444", ExpenseType.INSTALLMENT);
+        getOrCreateCategory("Salidas, Bares y Restaurantes", "utensils", "#EC4899", ExpenseType.LEISURE);
+        getOrCreateCategory("Transporte y Combustible", "car", "#0EA5E9", ExpenseType.TRANSPORT);
+        getOrCreateCategory("Gastos Diarios / Varios", "coffee", "#64748B", ExpenseType.DAILY);
 
-        // 3. Precargar gastos del 2026 de la planilla de Tomas si aún no hay ninguno
-        if (expenseRepository.count() == 0) {
-            log.info("Precargando gastos y servicios iniciales del 2026 para Tomas...");
+        // 3. Cargar historial completo 2026 de la planilla de Tomas si aún solo están los 8 iniciales
+        if (expenseRepository.count() <= 10) {
+            log.info("Cargando el historial completo de impuestos y servicios 2026 de Tomas...");
+            expenseRepository.deleteAll();
 
-            List<Expense> initialExpenses = List.of(
-                    // EPEC (Luz)
-                    Expense.builder()
-                            .title("EPEC - Energía Eléctrica")
-                            .description("Contrato 0285055301 / Cliente 4941318")
-                            .amount(new BigDecimal("26880.70"))
-                            .currency(Currency.ARS)
-                            .date(LocalDate.of(2026, 11, 2))
-                            .expenseType(ExpenseType.SERVICE)
-                            .paymentMethod(PaymentMethod.BANK_TRANSFER)
-                            .status(ExpenseStatus.PAID)
-                            .category(serviciosCat)
-                            .isRecurring(true)
-                            .recurrenceDay(5)
-                            .referenceCode("0285055301")
-                            .period("5.1-2")
-                            .user(user)
-                            .build(),
+            List<Expense> all2026 = new ArrayList<>();
 
-                    // ECOGAS
-                    Expense.builder()
-                            .title("ECOGAS - Gas Natural")
-                            .description("Cuenta 21289350 - Factura bimestral cuota 1/2")
-                            .amount(new BigDecimal("15159.65"))
-                            .currency(Currency.ARS)
-                            .date(LocalDate.of(2026, 11, 2))
-                            .expenseType(ExpenseType.SERVICE)
-                            .paymentMethod(PaymentMethod.DEBIT_CARD)
-                            .status(ExpenseStatus.PAID)
-                            .category(serviciosCat)
-                            .isRecurring(true)
-                            .recurrenceDay(8)
-                            .referenceCode("21289350")
-                            .period("05-1/2")
-                            .user(user)
-                            .build(),
+            // --- CONTRIBUCIÓN INMUEBLE (Municipalidad de Cba) - Padrón 030900102500015/4 ---
+            Object[][] muniData = {
+                    {2, "16657.00", "Cuota 1"}, {3, "16657.00", "Cuota 2"}, {4, "16657.00", "Cuota 3"},
+                    {5, "17701.36", "Cuota 4"}, {6, "16657.00", "Cuota 5"}, {7, "18931.00", "Cuota 6"},
+                    {8, "18931.00", "Cuota 7"}, {9, "18931.00", "Cuota 8"}, {10, "18931.00", "Cuota 9"},
+                    {11, "18931.00", "Cuota 10"}
+            };
+            for (Object[] row : muniData) {
+                int m = (int) row[0];
+                all2026.add(buildServiceExpense(
+                        user, impuestosCat, "Contribución Inmueble (Muni Cba)",
+                        "Municipalidad de Córdoba - Padrón 030900102500015/4",
+                        (String) row[1], LocalDate.of(2026, m, 10),
+                        PaymentMethod.DEBIT_CARD, ExpenseStatus.PAID,
+                        "030900102500015/4", (String) row[2], 10
+                ));
+            }
 
-                    // AGUAS CORDOBESAS
-                    Expense.builder()
-                            .title("Aguas Cordobesas")
-                            .description("N° Facturación: 729093 - Débito Automático Banco Nación")
-                            .amount(new BigDecimal("22526.18"))
-                            .currency(Currency.ARS)
-                            .date(LocalDate.of(2026, 10, 21))
-                            .expenseType(ExpenseType.SERVICE)
-                            .paymentMethod(PaymentMethod.BANK_TRANSFER)
-                            .status(ExpenseStatus.PAID)
-                            .category(serviciosCat)
-                            .isRecurring(true)
-                            .recurrenceDay(21)
-                            .referenceCode("729093")
-                            .period("2026/10")
-                            .user(user)
-                            .build(),
+            // --- RENTAS INMUEBLE (Prov. de Córdoba) - Cuenta 110140272540 ---
+            Object[][] rentasData = {
+                    {2, "4583.49", "Cuota 1"}, {3, "4583.49", "Cuota 2"}, {4, "4583.49", "Cuota 3"},
+                    {5, "4583.49", "Cuota 4"}, {6, "4583.19", "Cuota 5"}, {7, "4583.50", "Cuota 6"},
+                    {9, "4580.00", "Cuota 8"}, {10, "4583.49", "Cuota 9"}, {11, "4580.00", "Cuota 10"}
+            };
+            for (Object[] row : rentasData) {
+                int m = (int) row[0];
+                all2026.add(buildServiceExpense(
+                        user, impuestosCat, "Rentas Inmueble (Prov. Córdoba)",
+                        "Rentas Provincia de Córdoba - Cuenta 110140272540",
+                        (String) row[1], LocalDate.of(2026, m, 10),
+                        PaymentMethod.DEBIT_CARD, ExpenseStatus.PAID,
+                        "110140272540", (String) row[2], 10
+                ));
+            }
 
-                    // CLARO HOGAR
-                    Expense.builder()
-                            .title("Claro Internet + TV (Hogar)")
-                            .description("N° cuenta: 21438376749")
-                            .amount(new BigDecimal("19514.16"))
-                            .currency(Currency.ARS)
-                            .date(LocalDate.of(2026, 10, 15))
-                            .expenseType(ExpenseType.SERVICE)
-                            .paymentMethod(PaymentMethod.DEBIT_CARD)
-                            .status(ExpenseStatus.PAID)
-                            .category(telefoniaCat)
-                            .isRecurring(true)
-                            .recurrenceDay(15)
-                            .referenceCode("21438376749")
-                            .period("2026/10")
-                            .user(user)
-                            .build(),
+            // --- ECOGAS - Cuenta 21289350 ---
+            Object[][] ecogasData = {
+                    {3, "9603.91", "01-1/2"}, {4, "9568.05", "01-2/2"},
+                    {5, "9000.22", "02-1/2"}, {6, "8880.43", "02-2/2"},
+                    {7, "25269.50", "03-1/2"}, {8, "25154.29", "03-2/2"},
+                    {9, "27497.73", "04-1/2"}, {10, "27282.15", "04-2/2"},
+                    {11, "15159.65", "05-1/2"}
+            };
+            for (Object[] row : ecogasData) {
+                int m = (int) row[0];
+                all2026.add(buildServiceExpense(
+                        user, serviciosCat, "ECOGAS - Gas Natural",
+                        "Cuenta 21289350",
+                        (String) row[1], LocalDate.of(2026, m, 8),
+                        PaymentMethod.DEBIT_CARD, ExpenseStatus.PAID,
+                        "21289350", (String) row[2], 8
+                ));
+            }
 
-                    // EXPENSAS
-                    Expense.builder()
-                            .title("Expensas Edificio")
-                            .description("Liquidación mensual de expensas")
-                            .amount(new BigDecimal("79333.22"))
-                            .currency(Currency.ARS)
-                            .date(LocalDate.of(2026, 10, 10))
-                            .expenseType(ExpenseType.SERVICE)
-                            .paymentMethod(PaymentMethod.BANK_TRANSFER)
-                            .status(ExpenseStatus.PAID)
-                            .category(impuestosCat)
-                            .isRecurring(true)
-                            .recurrenceDay(10)
-                            .period("2026/10")
-                            .user(user)
-                            .build(),
+            // --- EPEC - Contrato 0285055301 ---
+            Object[][] epecData = {
+                    {3, "30847.80", "1.1-2"}, {4, "56413.60", "1.2-2"},
+                    {5, "61241.20", "2.1-2"}, {6, "27194.00", "2.2-2"},
+                    {7, "59480.00", "3.1-2"}, {8, "62109.50", "3.2-2"},
+                    {9, "38315.50", "4.1-2"}, {10, "51478.90", "4.2-2"},
+                    {11, "26880.70", "5.1-2"}
+            };
+            for (Object[] row : epecData) {
+                int m = (int) row[0];
+                all2026.add(buildServiceExpense(
+                        user, serviciosCat, "EPEC - Energía Eléctrica",
+                        "Contrato 0285055301 / Cliente 4941318",
+                        (String) row[1], LocalDate.of(2026, m, 5),
+                        PaymentMethod.BANK_TRANSFER, ExpenseStatus.PAID,
+                        "0285055301", (String) row[2], 5
+                ));
+            }
 
-                    // MUNICIPALIDAD DE CORDOBA
-                    Expense.builder()
-                            .title("Contribución Inmueble (Muni Cba)")
-                            .description("Padrón 030900102500015/4")
-                            .amount(new BigDecimal("18931.00"))
-                            .currency(Currency.ARS)
-                            .date(LocalDate.of(2026, 11, 1))
-                            .expenseType(ExpenseType.SERVICE)
-                            .paymentMethod(PaymentMethod.DEBIT_CARD)
-                            .status(ExpenseStatus.PAID)
-                            .category(impuestosCat)
-                            .isRecurring(true)
-                            .recurrenceDay(10)
-                            .referenceCode("030900102500015/4")
-                            .period("2026/10")
-                            .user(user)
-                            .build(),
+            // --- AGUAS CORDOBESAS - N° Facturación 729093 ---
+            Object[][] aguasData = {
+                    {2, "19322.08", "Cuota 1"}, {3, "19322.08", "Cuota 2"}, {4, "19322.08", "Cuota 3"},
+                    {5, "20712.41", "Cuota 4"}, {6, "20898.18", "Cuota 5"}, {7, "20898.18", "Cuota 6"},
+                    {8, "22526.18", "Cuota 7"}, {9, "22526.18", "Cuota 8"}, {10, "22526.18", "Cuota 9"}
+            };
+            for (Object[] row : aguasData) {
+                int m = (int) row[0];
+                all2026.add(buildServiceExpense(
+                        user, serviciosCat, "Aguas Cordobesas",
+                        "N° Facturación: 729093 - DA: Banco Nación",
+                        (String) row[1], LocalDate.of(2026, m, 21),
+                        PaymentMethod.BANK_TRANSFER, ExpenseStatus.PAID,
+                        "729093", (String) row[2], 21
+                ));
+            }
+            // Noviembre Aguas Cordobesas (Pendiente de cobro en el mes actual)
+            all2026.add(buildServiceExpense(
+                    user, serviciosCat, "Aguas Cordobesas",
+                    "N° Facturación: 729093 - DA: Banco Nación",
+                    "22526.18", LocalDate.of(2026, 11, 21),
+                    PaymentMethod.BANK_TRANSFER, ExpenseStatus.PENDING,
+                    "729093", "Cuota 10", 21
+            ));
 
-                    // RENTAS CORDOBA
-                    Expense.builder()
-                            .title("Rentas Inmueble (Prov. Córdoba)")
-                            .description("Cuenta 110140272540")
-                            .amount(new BigDecimal("4580.00"))
-                            .currency(Currency.ARS)
-                            .date(LocalDate.of(2026, 11, 1))
-                            .expenseType(ExpenseType.SERVICE)
-                            .paymentMethod(PaymentMethod.DEBIT_CARD)
-                            .status(ExpenseStatus.PAID)
-                            .category(impuestosCat)
-                            .isRecurring(true)
-                            .recurrenceDay(10)
-                            .referenceCode("110140272540")
-                            .period("2026/10")
-                            .user(user)
-                            .build(),
+            // --- CLARO INTERNET + TV (Hogar) - Cuenta 21438376749 ---
+            Object[][] claroHogarData = {
+                    {1, "38177.11", "2026/01"}, {2, "39985.07", "2026/02"}, {3, "41664.46", "2026/03"},
+                    {4, "43367.35", "2026/04"}, {5, "45408.82", "2026/05"}, {6, "51793.67", "2026/06"},
+                    {7, "54483.33", "2026/07"}, {8, "57251.00", "2026/08"}, {9, "37238.66", "2026/09"},
+                    {10, "19514.16", "2026/10"}
+            };
+            for (Object[] row : claroHogarData) {
+                int m = (int) row[0];
+                all2026.add(buildServiceExpense(
+                        user, telefoniaCat, "Claro Internet + TV (Hogar)",
+                        "N° cuenta: 21438376749 - Cuenta de la casa",
+                        (String) row[1], LocalDate.of(2026, m, 15),
+                        PaymentMethod.DEBIT_CARD, ExpenseStatus.PAID,
+                        "21438376749", (String) row[2], 15
+                ));
+            }
+            // Noviembre Claro Hogar (Pendiente)
+            all2026.add(buildServiceExpense(
+                    user, telefoniaCat, "Claro Internet + TV (Hogar)",
+                    "N° cuenta: 21438376749 - Cuenta de la casa",
+                    "19514.16", LocalDate.of(2026, 11, 15),
+                    PaymentMethod.DEBIT_CARD, ExpenseStatus.PENDING,
+                    "21438376749", "2026/11", 15
+            ));
 
-                    // CLARO TOMÁS
-                    Expense.builder()
-                            .title("Claro Celular (Tomás)")
-                            .description("Línea móvil personal")
-                            .amount(new BigDecimal("35993.99"))
-                            .currency(Currency.ARS)
-                            .date(LocalDate.of(2026, 10, 20))
-                            .expenseType(ExpenseType.SERVICE)
-                            .paymentMethod(PaymentMethod.DEBIT_CARD)
-                            .status(ExpenseStatus.PAID)
-                            .category(telefoniaCat)
-                            .isRecurring(true)
-                            .recurrenceDay(20)
-                            .period("2026/10")
-                            .user(user)
-                            .build()
-            );
+            // --- EXPENSAS ---
+            Object[][] expensasData = {
+                    {1, "68083.00", "2026/01"}, {2, "54863.00", "2026/02"}, {3, "54863.00", "2026/03"},
+                    {4, "54863.00", "2026/04"}, {5, "60349.30", "2026/05"}, {6, "60349.30", "2026/06"},
+                    {7, "75089.60", "2026/07"}, {8, "75089.60", "2026/08"}, {9, "75089.50", "2026/09"},
+                    {10, "79333.22", "2026/10"}
+            };
+            for (Object[] row : expensasData) {
+                int m = (int) row[0];
+                all2026.add(buildServiceExpense(
+                        user, impuestosCat, "Expensas",
+                        "Liquidación mensual de expensas",
+                        (String) row[1], LocalDate.of(2026, m, 10),
+                        PaymentMethod.BANK_TRANSFER, ExpenseStatus.PAID,
+                        null, (String) row[2], 10
+                ));
+            }
+            // Noviembre Expensas (Pendiente)
+            all2026.add(buildServiceExpense(
+                    user, impuestosCat, "Expensas",
+                    "Liquidación mensual de expensas",
+                    "79333.22", LocalDate.of(2026, 11, 10),
+                    PaymentMethod.BANK_TRANSFER, ExpenseStatus.PENDING,
+                    null, "2026/11", 10
+            ));
 
-            expenseRepository.saveAll(initialExpenses);
-            log.info("{} gastos precargados exitosamente en la base de datos.", initialExpenses.size());
+            // --- CLARO TOMÁS ---
+            Object[][] claroTomasData = {
+                    {1, "25164.00", "2026/01"}, {2, "29850.02", "2026/02"}, {3, "27345.01", "2026/03"},
+                    {4, "28407.00", "2026/04"}, {5, "29685.00", "2026/05"}, {6, "31167.00", "2026/06"},
+                    {7, "32724.00", "2026/07"}, {8, "34301.99", "2026/08"}, {9, "36942.01", "2026/09"},
+                    {10, "35993.99", "2026/10"}
+            };
+            for (Object[] row : claroTomasData) {
+                int m = (int) row[0];
+                all2026.add(buildServiceExpense(
+                        user, telefoniaCat, "Claro Tomás (Línea Móvil)",
+                        "Servicio móvil personal (desde 02/07/2021)",
+                        (String) row[1], LocalDate.of(2026, m, 20),
+                        PaymentMethod.DEBIT_CARD, ExpenseStatus.PAID,
+                        null, (String) row[2], 20
+                ));
+            }
+            // Noviembre Claro Tomás (Pendiente)
+            all2026.add(buildServiceExpense(
+                    user, telefoniaCat, "Claro Tomás (Línea Móvil)",
+                    "Servicio móvil personal (desde 02/07/2021)",
+                    "35993.99", LocalDate.of(2026, 11, 20),
+                    PaymentMethod.DEBIT_CARD, ExpenseStatus.PENDING,
+                    null, "2026/11", 20
+            ));
+
+            expenseRepository.saveAll(all2026);
+            log.info("{} registros históricos de 2026 cargados exitosamente.", all2026.size());
         }
+    }
+
+    private Expense buildServiceExpense(
+            User user, Category category, String title, String description,
+            String amountStr, LocalDate date, PaymentMethod pm, ExpenseStatus status,
+            String refCode, String period, int recurrenceDay
+    ) {
+        return Expense.builder()
+                .title(title)
+                .description(description)
+                .amount(new BigDecimal(amountStr))
+                .currency(Currency.ARS)
+                .date(date)
+                .expenseType(ExpenseType.SERVICE)
+                .paymentMethod(pm)
+                .status(status)
+                .category(category)
+                .isRecurring(true)
+                .recurrenceDay(recurrenceDay)
+                .referenceCode(refCode)
+                .period(period)
+                .user(user)
+                .build();
     }
 
     private Category getOrCreateCategory(String name, String icon, String color, ExpenseType type) {

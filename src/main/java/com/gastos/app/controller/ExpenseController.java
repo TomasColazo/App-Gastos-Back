@@ -3,12 +3,12 @@ package com.gastos.app.controller;
 import com.gastos.app.dto.expense.ExpenseRequest;
 import com.gastos.app.dto.expense.ExpenseResponse;
 import com.gastos.app.dto.expense.ExpenseSummaryResponse;
-import com.gastos.app.model.ExpenseType;
-import com.gastos.app.model.User;
+import com.gastos.app.model.*;
 import com.gastos.app.service.AuthService;
 import com.gastos.app.service.ExpenseService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -30,11 +30,20 @@ public class ExpenseController {
     public ResponseEntity<List<ExpenseResponse>> getExpenses(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) ExpenseType type,
+            @RequestParam(required = false) ExpenseStatus status,
+            @RequestParam(required = false) Currency currency,
+            @RequestParam(required = false) PaymentMethod paymentMethod,
+            @RequestParam(required = false) String search,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         User user = authService.getUserByEmail(userDetails.getUsername());
-        return ResponseEntity.ok(expenseService.getExpenses(user, year, month, type));
+        return ResponseEntity.ok(expenseService.getExpenses(
+                user, year, month, startDate, endDate, categoryId, type, status, currency, paymentMethod, search
+        ));
     }
 
     @GetMapping("/{id}")

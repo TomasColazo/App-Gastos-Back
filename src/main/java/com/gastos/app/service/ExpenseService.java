@@ -6,13 +6,19 @@ import com.gastos.app.dto.expense.ExpenseSummaryResponse;
 import com.gastos.app.exception.ResourceNotFoundException;
 import com.gastos.app.model.*;
 import com.gastos.app.repository.ExpenseRepository;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,21 +31,70 @@ public class ExpenseService {
     private final ExpenseRepository expenseRepository;
     private final CategoryService categoryService;
 
-    public List<ExpenseResponse> getExpenses(User user, Integer year, Integer month, ExpenseType type) {
-        List<Expense> list;
+    public List<ExpenseResponse> getExpenses(
+            User user,
+            Integer year,
+            Integer month,
+            LocalDate startDate,
+            LocalDate endDate,
+            Long categoryId,
+            ExpenseType type,
+            ExpenseStatus status,
+            Currency currency,
+            PaymentMethod paymentMethod,
+            String search
+    ) {
+        Specification<Expense> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("user").get("id"), user.getId()));
 
-        if (year != null && month != null) {
-            YearMonth ym = YearMonth.of(year, month);
-            LocalDate start = ym.atDay(1);
-            LocalDate end = ym.atEndOfMonth();
-            list = expenseRepository.findByUserIdAndDateBetweenOrderByDateDesc(user.getId(), start, end);
-        } else if (type != null) {
-            list = expenseRepository.findByUserIdAndExpenseTypeOrderByDateDesc(user.getId(), type);
-        } else {
-            list = expenseRepository.findByUserIdOrderByDateDesc(user.getId());
-        }
+            if (year != null && month != null) {
+                YearMonth ym = YearMonth.of(year, month);
+                predicates.add(cb.between(root.get("date"), ym.atDay(1), ym.atEndOfMonth()));
+            } else if (year != null) {
+                LocalDate start = LocalDate.of(year, 1, 1);
+                LocalDate end = LocalDate.of(year, 12, 31);
+                predicates.add(cb.between(root.get("date"), start, end));
+            }
 
-        return list.stream().map(this::mapToResponse).collect(Collectors.toList());
+            if (startDate != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("date"), startDate));
+            }
+            if (endDate != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("date"), endDate));
+            }
+            if (categoryId != null) {
+                predicates.add(cb.equal(root.get("category").get("id"), categoryId));
+            }
+            if (type != null) {
+                predicates.add(cb.equal(root.get("expenseType"), type));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (currency != null) {
+                predicates.add(cb.equal(root.get("currency"), currency));
+            }
+            if (paymentMethod != null) {
+                predicates.add(cb.equal(root.get("paymentMethod"), paymentMethod));
+            }
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.trim().toLowerCase() + "%";
+                Predicate titleMatch = cb.like(cb.lower(root.get("title")), pattern);
+                Predicate descMatch = cb.like(cb.lower(cb.coalesce(root.get("description"), "")), pattern);
+                Predicate refMatch = cb.like(cb.lower(cb.coalesce(root.get("referenceCode"), "")), pattern);
+                Predicate periodMatch = cb.like(cb.lower(cb.coalesce(root.get("period"), "")), pattern);
+                predicates.add(cb.or(titleMatch, descMatch, refMatch, periodMatch));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Sort sort = Sort.by(Sort.Order.desc("date"), Sort.Order.desc("id"));
+        return expenseRepository.findAll(spec, sort)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 
     public ExpenseResponse getExpenseById(Long id, User user) {
@@ -125,17 +180,89 @@ public class ExpenseService {
         List<Expense> expenses = expenseRepository.findByUserIdAndDateBetweenOrderByDateDesc(user.getId(), start, end);
 
         Map<Currency, BigDecimal> totalsByCurrency = new HashMap<>();
+        Map<Currency, BigDecimal> paidByCurrency = new HashMap<>();
+        Map<Currency, BigDecimal> pendingByCurrency = new HashMap<>();
         Map<ExpenseType, BigDecimal> totalsByType = new HashMap<>();
+        Map<Long, ExpenseSummaryResponse.CategoryBreakdownItem> categoryMap = new HashMap<>();
+
+        long paidCount = 0;
+        long pendingCount = 0;
 
         for (Expense exp : expenses) {
-            totalsByCurrency.merge(exp.getCurrency(), exp.getAmount(), BigDecimal::add);
-            totalsByType.merge(exp.getExpenseType(), exp.getAmount(), BigDecimal::add);
+            Currency curr = exp.getCurrency();
+            BigDecimal amt = exp.getAmount();
+
+            totalsByCurrency.merge(curr, amt, BigDecimal::add);
+
+            if (exp.getStatus() == ExpenseStatus.PENDING) {
+                pendingByCurrency.merge(curr, amt, BigDecimal::add);
+                pendingCount++;
+            } else {
+                paidByCurrency.merge(curr, amt, BigDecimal::add);
+                paidCount++;
+            }
+
+            if (curr == Currency.ARS) {
+                totalsByType.merge(exp.getExpenseType(), amt, BigDecimal::add);
+            }
+
+            Category cat = exp.getCategory();
+            ExpenseSummaryResponse.CategoryBreakdownItem item = categoryMap.computeIfAbsent(
+                    cat.getId(),
+                    id -> ExpenseSummaryResponse.CategoryBreakdownItem.builder()
+                            .categoryId(cat.getId())
+                            .categoryName(cat.getName())
+                            .color(cat.getColor())
+                            .icon(cat.getIcon())
+                            .totalArs(BigDecimal.ZERO)
+                            .totalUsd(BigDecimal.ZERO)
+                            .count(0)
+                            .percentageArs(0.0)
+                            .build()
+            );
+
+            item.setCount(item.getCount() + 1);
+            if (curr == Currency.USD) {
+                item.setTotalUsd(item.getTotalUsd().add(amt));
+            } else {
+                item.setTotalArs(item.getTotalArs().add(amt));
+            }
         }
+
+        BigDecimal totalArs = totalsByCurrency.getOrDefault(Currency.ARS, BigDecimal.ZERO);
+        List<ExpenseSummaryResponse.CategoryBreakdownItem> breakdown = categoryMap.values().stream()
+                .peek(item -> {
+                    if (totalArs.compareTo(BigDecimal.ZERO) > 0 && item.getTotalArs().compareTo(BigDecimal.ZERO) > 0) {
+                        double pct = item.getTotalArs()
+                                .multiply(BigDecimal.valueOf(100))
+                                .divide(totalArs, 1, RoundingMode.HALF_UP)
+                                .doubleValue();
+                        item.setPercentageArs(pct);
+                    }
+                })
+                .sorted(Comparator.comparing(ExpenseSummaryResponse.CategoryBreakdownItem::getTotalArs).reversed())
+                .collect(Collectors.toList());
+
+        // Mes anterior para comparativa
+        YearMonth prevYm = ym.minusMonths(1);
+        List<Expense> prevExpenses = expenseRepository.findByUserIdAndDateBetweenOrderByDateDesc(
+                user.getId(), prevYm.atDay(1), prevYm.atEndOfMonth()
+        );
+        BigDecimal prevTotalArs = prevExpenses.stream()
+                .filter(e -> e.getCurrency() == Currency.ARS)
+                .map(Expense::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return ExpenseSummaryResponse.builder()
                 .totalsByCurrency(totalsByCurrency)
+                .paidByCurrency(paidByCurrency)
+                .pendingByCurrency(pendingByCurrency)
                 .totalsByType(totalsByType)
+                .categoryBreakdown(breakdown)
                 .totalExpensesCount(expenses.size())
+                .paidCount(paidCount)
+                .pendingCount(pendingCount)
+                .previousMonthTotalArs(prevTotalArs)
                 .month(month)
                 .year(year)
                 .build();
