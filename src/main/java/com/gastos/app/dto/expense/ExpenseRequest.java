@@ -1,6 +1,7 @@
 package com.gastos.app.dto.expense;
 
 import com.gastos.app.model.Currency;
+import com.gastos.app.model.ExpenseStatus;
 import com.gastos.app.model.ExpenseType;
 import com.gastos.app.model.PaymentMethod;
 import jakarta.validation.constraints.DecimalMin;
@@ -31,6 +32,8 @@ public class ExpenseRequest {
 
     private PaymentMethod paymentMethod = PaymentMethod.DEBIT_CARD;
 
+    private ExpenseStatus status = ExpenseStatus.PAID;
+
     @NotNull(message = "La categoría es obligatoria")
     private Long categoryId;
 
@@ -41,4 +44,9 @@ public class ExpenseRequest {
     // Recurrente / Servicios / Suscripciones
     private Boolean isRecurring = false;
     private Integer recurrenceDay;
+
+    // Comprobante y cuenta de servicio
+    private String receiptUrl;
+    private String referenceCode;
+    private String period;
 }

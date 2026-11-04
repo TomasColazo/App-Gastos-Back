@@ -2,6 +2,7 @@ package com.gastos.app.dto.expense;
 
 import com.gastos.app.dto.category.CategoryResponse;
 import com.gastos.app.model.Currency;
+import com.gastos.app.model.ExpenseStatus;
 import com.gastos.app.model.ExpenseType;
 import com.gastos.app.model.PaymentMethod;
 import lombok.AllArgsConstructor;
@@ -26,10 +27,14 @@ public class ExpenseResponse {
     private LocalDate date;
     private ExpenseType expenseType;
     private PaymentMethod paymentMethod;
+    private ExpenseStatus status;
     private CategoryResponse category;
     private Integer installmentNumber;
     private Integer totalInstallments;
     private boolean isRecurring;
     private Integer recurrenceDay;
+    private String receiptUrl;
+    private String referenceCode;
+    private String period;
     private LocalDateTime createdAt;
 }

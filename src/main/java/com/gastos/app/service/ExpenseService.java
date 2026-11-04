@@ -59,11 +59,15 @@ public class ExpenseService {
                 .date(request.getDate() != null ? request.getDate() : LocalDate.now())
                 .expenseType(request.getExpenseType() != null ? request.getExpenseType() : ExpenseType.DAILY)
                 .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : PaymentMethod.DEBIT_CARD)
+                .status(request.getStatus() != null ? request.getStatus() : ExpenseStatus.PAID)
                 .category(category)
                 .installmentNumber(request.getInstallmentNumber())
                 .totalInstallments(request.getTotalInstallments())
                 .isRecurring(Boolean.TRUE.equals(request.getIsRecurring()))
                 .recurrenceDay(request.getRecurrenceDay())
+                .receiptUrl(request.getReceiptUrl())
+                .referenceCode(request.getReferenceCode())
+                .period(request.getPeriod())
                 .user(user)
                 .build();
 
@@ -91,11 +95,17 @@ public class ExpenseService {
         if (request.getPaymentMethod() != null) {
             expense.setPaymentMethod(request.getPaymentMethod());
         }
+        if (request.getStatus() != null) {
+            expense.setStatus(request.getStatus());
+        }
         expense.setCategory(category);
         expense.setInstallmentNumber(request.getInstallmentNumber());
         expense.setTotalInstallments(request.getTotalInstallments());
         expense.setRecurring(Boolean.TRUE.equals(request.getIsRecurring()));
         expense.setRecurrenceDay(request.getRecurrenceDay());
+        expense.setReceiptUrl(request.getReceiptUrl());
+        expense.setReferenceCode(request.getReferenceCode());
+        expense.setPeriod(request.getPeriod());
 
         Expense updated = expenseRepository.save(expense);
         return mapToResponse(updated);
@@ -118,10 +128,7 @@ public class ExpenseService {
         Map<ExpenseType, BigDecimal> totalsByType = new HashMap<>();
 
         for (Expense exp : expenses) {
-            // Totales por divisa
             totalsByCurrency.merge(exp.getCurrency(), exp.getAmount(), BigDecimal::add);
-
-            // Totales por tipo de gasto
             totalsByType.merge(exp.getExpenseType(), exp.getAmount(), BigDecimal::add);
         }
 
@@ -144,7 +151,7 @@ public class ExpenseService {
         return expense;
     }
 
-    private ExpenseResponse mapToResponse(Expense expense) {
+    public ExpenseResponse mapToResponse(Expense expense) {
         return ExpenseResponse.builder()
                 .id(expense.getId())
                 .title(expense.getTitle())
@@ -154,11 +161,15 @@ public class ExpenseService {
                 .date(expense.getDate())
                 .expenseType(expense.getExpenseType())
                 .paymentMethod(expense.getPaymentMethod())
+                .status(expense.getStatus())
                 .category(categoryService.mapToResponse(expense.getCategory()))
                 .installmentNumber(expense.getInstallmentNumber())
                 .totalInstallments(expense.getTotalInstallments())
                 .isRecurring(expense.isRecurring())
                 .recurrenceDay(expense.getRecurrenceDay())
+                .receiptUrl(expense.getReceiptUrl())
+                .referenceCode(expense.getReferenceCode())
+                .period(expense.getPeriod())
                 .createdAt(expense.getCreatedAt())
                 .build();
     }

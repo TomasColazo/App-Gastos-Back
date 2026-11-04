@@ -46,6 +46,11 @@ public class Expense {
     @Builder.Default
     private PaymentMethod paymentMethod = PaymentMethod.DEBIT_CARD;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private ExpenseStatus status = ExpenseStatus.PAID;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
@@ -65,6 +70,16 @@ public class Expense {
     @Column(name = "recurrence_day")
     private Integer recurrenceDay; // Día del mes en que vence/se cobra
 
+    // Campos para comprobantes y cuentas (ej: Drive, factura EPEC/Ecogas)
+    @Column(name = "receipt_url", length = 1000)
+    private String receiptUrl;
+
+    @Column(name = "reference_code")
+    private String referenceCode; // N° contrato EPEC, cuenta Ecogas, etc.
+
+    @Column(name = "period")
+    private String period; // Ej: 2026/01, 01-1/2
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -77,6 +92,9 @@ public class Expense {
         this.createdAt = LocalDateTime.now();
         if (this.date == null) {
             this.date = LocalDate.now();
+        }
+        if (this.status == null) {
+            this.status = ExpenseStatus.PAID;
         }
     }
 }
