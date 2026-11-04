@@ -43,18 +43,22 @@ public class DataInitializer implements CommandLineRunner {
                     return userRepository.save(newUser);
                 });
 
-        // 2. Asegurar que existan todas las categorías necesarias
+        // 2. Asegurar que existan las categorías por concepto/rubro
         Category serviciosCat = getOrCreateCategory("Servicios del Hogar (Luz, Agua, Gas, Internet)", "zap", "#F59E0B", ExpenseType.SERVICE);
         Category impuestosCat = getOrCreateCategory("Impuestos (Muni, Rentas, Expensas)", "landmark", "#3B82F6", ExpenseType.SERVICE);
         Category telefoniaCat = getOrCreateCategory("Telefonía y Comunicaciones", "phone", "#6366F1", ExpenseType.SERVICE);
         getOrCreateCategory("Supermercado y Alimentos", "shopping-cart", "#10B981", ExpenseType.GROCERY);
-        getOrCreateCategory("Suscripciones Digitales", "tv", "#8B5CF6", ExpenseType.SUBSCRIPTION);
-        getOrCreateCategory("Cuotas de Tarjeta y Préstamos", "credit-card", "#EF4444", ExpenseType.INSTALLMENT);
+        Category entretenimientoCat = getOrCreateCategory("Entretenimiento", "gamepad", "#8B5CF6", ExpenseType.LEISURE);
         getOrCreateCategory("Salidas, Bares y Restaurantes", "utensils", "#EC4899", ExpenseType.LEISURE);
         getOrCreateCategory("Transporte y Combustible", "car", "#0EA5E9", ExpenseType.TRANSPORT);
-        getOrCreateCategory("Gastos Diarios / Varios", "coffee", "#64748B", ExpenseType.DAILY);
+        getOrCreateCategory("Salud y Farmacia", "heart-pulse", "#06B6D4", ExpenseType.HEALTH);
+        Category variosCat = getOrCreateCategory("Gastos Diarios / Varios", "coffee", "#64748B", ExpenseType.DAILY);
 
-        // 3. Cargar historial completo 2026 de la planilla de Tomas si aún solo están los 8 iniciales
+        // Limpiar categorías obsoletas que eran formas de pago ("Cuotas de Tarjeta..." y "Suscripciones Digitales")
+        removeObsoleteCategory("Cuotas de Tarjeta", variosCat);
+        removeObsoleteCategory("Suscripciones Digitales", entretenimientoCat);
+
+        // 3. Cargar historial completo 2026 de la planilla de Tomas si aún solo están los iniciales
         if (expenseRepository.count() <= 10) {
             log.info("Cargando el historial completo de impuestos y servicios 2026 de Tomas...");
             expenseRepository.deleteAll();
@@ -150,7 +154,6 @@ public class DataInitializer implements CommandLineRunner {
                         "729093", (String) row[2], 21
                 ));
             }
-            // Noviembre Aguas Cordobesas (Pendiente de cobro en el mes actual)
             all2026.add(buildServiceExpense(
                     user, serviciosCat, "Aguas Cordobesas",
                     "N° Facturación: 729093 - DA: Banco Nación",
@@ -176,7 +179,6 @@ public class DataInitializer implements CommandLineRunner {
                         "21438376749", (String) row[2], 15
                 ));
             }
-            // Noviembre Claro Hogar (Pendiente)
             all2026.add(buildServiceExpense(
                     user, telefoniaCat, "Claro Internet + TV (Hogar)",
                     "N° cuenta: 21438376749 - Cuenta de la casa",
@@ -202,7 +204,6 @@ public class DataInitializer implements CommandLineRunner {
                         null, (String) row[2], 10
                 ));
             }
-            // Noviembre Expensas (Pendiente)
             all2026.add(buildServiceExpense(
                     user, impuestosCat, "Expensas",
                     "Liquidación mensual de expensas",
@@ -228,7 +229,6 @@ public class DataInitializer implements CommandLineRunner {
                         null, (String) row[2], 20
                 ));
             }
-            // Noviembre Claro Tomás (Pendiente)
             all2026.add(buildServiceExpense(
                     user, telefoniaCat, "Claro Tomás (Línea Móvil)",
                     "Servicio móvil personal (desde 02/07/2021)",
@@ -240,6 +240,22 @@ public class DataInitializer implements CommandLineRunner {
             expenseRepository.saveAll(all2026);
             log.info("{} registros históricos de 2026 cargados exitosamente.", all2026.size());
         }
+    }
+
+    private void removeObsoleteCategory(String prefix, Category fallbackCategory) {
+        categoryRepository.findAll().stream()
+                .filter(c -> c.getName().toLowerCase().startsWith(prefix.toLowerCase()))
+                .forEach(obsolete -> {
+                    List<Expense> linked = expenseRepository.findAll().stream()
+                            .filter(e -> e.getCategory().getId().equals(obsolete.getId()))
+                            .toList();
+                    if (!linked.isEmpty()) {
+                        linked.forEach(e -> e.setCategory(fallbackCategory));
+                        expenseRepository.saveAll(linked);
+                    }
+                    categoryRepository.delete(obsolete);
+                    log.info("Categoría obsoleta eliminada: {}", obsolete.getName());
+                });
     }
 
     private Expense buildServiceExpense(
